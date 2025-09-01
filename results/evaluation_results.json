@@ -1,0 +1,8 @@
+{
+  "exact_match_rate": 0.0,
+  "tool_name_accuracy": 0.0,
+  "average_argument_precision": 0.0,
+  "average_argument_recall": 0.0,
+  "average_argument_f1": 0.0,
+  "total_samples": 10
+}

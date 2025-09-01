@@ -22,9 +22,9 @@ project_root = os.path.dirname(os.path.abspath(__file__))
 if project_root not in sys.path:
     sys.path.append(project_root)
 
-BASE_MODEL_PATH = "./gemma-3-270m"
-PROMPT_TRAIN_CSV = "./train.csv"
-PROMPT_VAL_CSV = "./test.csv"
+BASE_MODEL_PATH = "./models/gemma-3-270m"
+PROMPT_TRAIN_CSV = "./data/train.csv"
+PROMPT_VAL_CSV = "./data/test.csv"
 TOKENIZED_TRAIN_PATH = "./cached/tokenized_train_gen"
 TOKENIZED_VAL_PATH = "./cached/tokenized_val_gen"
 OUTPUT_DIR = "./checkpoints/lora_gemma_generation"
@@ -72,8 +72,8 @@ def preprocess_data(examples, max_len=512):
     batch = {k: [] for k in ["input_ids", "attention_mask", "labels"]}
     
     for text, label_str in zip(examples["text"], examples["label"]):
-        prompt_ids = tokenizer(text, add_special_tokens=False)("input_ids")
-        answer_ids = tokenizer(label_str, add_special_tokens=False)("input_ids")
+        prompt_ids = tokenizer(text, add_special_tokens=False)["input_ids"]
+        answer_ids = tokenizer(label_str, add_special_tokens=False)["input_ids"]
 
         input_ids = prompt_ids + answer_ids + [tokenizer.eos_token_id]
         labels = [-100] * len(prompt_ids) + answer_ids + [tokenizer.eos_token_id]
@@ -152,11 +152,12 @@ if __name__ == "__main__":
         warmup_ratio=0.1,
         logging_steps=20,
         save_strategy="epoch",
-        evaluation_strategy="epoch",
+        # evaluation_strategy="no",
         fp16=True,
         gradient_checkpointing=True,
         report_to="none",
-        load_best_model_at_end=True,
+        # load_best_model_at_end=True,
+        weight_decay=0.01,
     )
 
     trainer = Trainer(
