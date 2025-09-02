@@ -89,26 +89,42 @@ Loading base model and tokenizer...
 Loading LoRA adapter from: ./checkpoints/lora_gemma_generation
 
 ==============================
+
 1. Starting evaluation of LoRA model on all samples...
+
 ==============================
+
 Evaluating LoRA model:   0%|          | 0/200 [00:00<?, ?it/s]W0902 06:07:42.197000 1453 torch/_inductor/utils.py:1436] [0/0] Not enough SMs to use max_autotune_gemm mode
+
 Evaluating LoRA model: 100%|██████████| 200/200 [04:15<00:00,  1.28s/it]
+
 ✅ Detailed evaluation results saved to ./results/lora_detailed_evaluation_results.csv
 
 --- LoRA Model Evaluation Summary ---
+
 {
+
   "exact_match_rate": 0.635,
+
   "tool_name_accuracy": 0.85,
+
   "average_argument_precision": 0.7425,
+
   "average_argument_recall": 0.81,
+
   "average_argument_f1": 0.765,
+
   "total_samples": 200
+
 }
 
 ✅ LoRA evaluation summary saved to ./results/lora_evaluation_results.json
 
+
 ==============================
+
 🎉 LoRA evaluation complete!
+
 ==============================
 
 ## convert to gguf
