@@ -15,7 +15,7 @@ project_root = os.path.dirname(os.path.abspath(__file__))
 if project_root not in sys.path:
     sys.path.append(project_root)
 
-BASE_MODEL_PATH = "./models/gemma-3-270m"
+BASE_MODEL_PATH = "./models/gemma-3-270m-it"
 LORA_MODEL_PATH = "./checkpoints/lora_gemma_generation" # 默认LoRA路径
 PROMPT_VAL_CSV = "./data/test.csv"
 RESULTS_DIR = "./results/"

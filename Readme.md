@@ -34,3 +34,11 @@ Predicted:
 ```
 output：{"tool_name": "get_calendar_events", "arguments": {"date": "今天"}}
 ```
+
+## convert to gguf
+
+推送到hf库后可以在线转
+
+https://huggingface.co/spaces/ggml-org/gguf-my-repo
+
+如果选择本地执行需要拷贝llama.cpp，`pip install -r requirements.txt`，然后执行转换脚本，例如：`python convert_hf_to_gguf.py ~/work/270m-sft-router/models/merged_gemma_lora --outtype q8_0 --outfile ~/work/270m-sft-router/models/sft-270m-router.gguf`
