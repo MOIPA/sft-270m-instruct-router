@@ -1,8 +1,8 @@
 {
-  "exact_match_rate": 0.095,
-  "tool_name_accuracy": 1.0,
-  "average_argument_precision": 0.1675,
-  "average_argument_recall": 0.155,
-  "average_argument_f1": 0.15916666666666668,
-  "total_samples": 200
+  "exact_match_rate": 0.8,
+  "tool_name_accuracy": 0.8,
+  "average_argument_precision": 0.8,
+  "average_argument_recall": 0.8,
+  "average_argument_f1": 0.8,
+  "total_samples": 10
 }

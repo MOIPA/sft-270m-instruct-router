@@ -42,3 +42,5 @@ output：{"tool_name": "get_calendar_events", "arguments": {"date": "今天"}}
 https://huggingface.co/spaces/ggml-org/gguf-my-repo
 
 如果选择本地执行需要拷贝llama.cpp，`pip install -r requirements.txt`，然后执行转换脚本，例如：`python convert_hf_to_gguf.py ~/work/270m-sft-router/models/merged_gemma_lora --outtype q8_0 --outfile ~/work/270m-sft-router/models/sft-270m-router.gguf`
+
+已经微调合并转换好的模型：[地址](https://huggingface.co/Segment139/gemma3-270m-it-router-Q8_0-GGUF/tree/main)
