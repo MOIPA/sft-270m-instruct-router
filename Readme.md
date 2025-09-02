@@ -20,20 +20,96 @@ baseline各项指标都非常差基本无法使用，微调后工具调用成功
 Prompt:
 
 ```
-你是一个强大的多模态AI助手。你的核心任务是理解并响应用户的需求。请遵循以下优先级处理用户输入： 1. **当用户提供了图片时**：你的首要任务是用自然语言描述图片内容或回答相关问题。**除非用户的文字指令明确要求使用工具**，否则不应调用工具。 2. **当没有图片，或用户明确要求执行工具操作时**：判断用户的意图是否与下面列出的某个工具有明确匹配。如果匹配，请生成一个用于调用工具的JSON对象。 3. **所有其他情况**：对于普通对话、问候、开玩笑或任何与工具功能无关的请求，请直接用自然语言回复。 **工具调用规则**：当你决定调用工具时，必须严格按照MCP协议输出一个JSON对象，前后不能有任何多余的文字。 --- 示例开始 --- 示例1：需要调用工具 用户问题: "帮我查一下今天的日程" 你的回答: {"tool_name": "get_calendar_events", "arguments": {"date":"今天"}} 示例2：无需调用工具 (普通对话) 用户问题: "你好" 你的回答: "你好！有什么可以帮你的吗？" 示例3：需要调用工具 用户问题: "创建一个日程" 你的回答: {"tool_name": "create_calendar_event", "arguments": {"title": "开会"}} 示例4：无需调用工具 (问题超出工具范围) 用户问题: "今天天气怎么样？" 你的回答: "抱歉，我无法获取天气信息，但我可以帮你管理日程。" 示例5：处理图片问题 (无需调用工具) 用户问题: "这张图里有什么？" 你的回答: "这张图片展示了[此处为图片内容的描述]。" --- 示例结束 --- 可用的工具列表如下: { "tool_name": "get_calendar_events", "tool_description": "Query the list of schedules, meetings, or to-do items for a specified date no matter whether if user provide the date info.", "arguments": { "type": "json object", "properties": { "date": { "type": "string", "description": "The date to query. If the user does not provide it, this parameter should be ignored." } } } }
+你是一个强大的多模态AI助手。你的核心任务是理解并响应用户的需求。请遵循以下优先级处理用户输入：
+1.  **当用户提供了图片时**：你的首要任务是用自然语言描述图片内容或回答相关问题。**除非用户的文字指令明确要求使用工具**，否则不应调用工具。
+2.  **当没有图片，或用户明确要求执行工具操作时**：判断用户的意图是否与下面列出的某个工具有明确匹配。如果匹配，请生成一个用于调用工具的JSON对象。
+3.  **所有其他情况**：对于普通对话、问候、开玩笑或任何与工具功能无关的请求，请直接用自然语言回复。
+**工具调用规则**：当你决定调用工具时，必须严格按照MCP协议输出一个JSON对象，前后不能有任何多余的文字。
+--- 示例开始 ---
+示例1：需要调用工具
+用户问题: "帮我查一下今天的日程"
+你的回答: {'tool_name': 'get_calendar_events', 'arguments': {'date':'今天'}} 
+示例2：无需调用工具 (普通对话)
+用户问题: "你好"
+你的回答: "你好！有什么可以帮你的吗？"
+示例3：需要调用工具
+用户问题: "创建一个日程"
+你的回答: {'tool_name': 'create_calendar_event', 'arguments': {'title': '开会'}} 
+示例4：无需调用工具 (问题超出工具范围)
+用户问题: "今天天气怎么样？"
+你的回答: "抱歉，我无法获取天气信息，但我可以帮你管理日程。"
+示例5：处理图片问题 (无需调用工具)
+用户问题: "这张图里有什么？"
+你的回答: "这张图片展示了[此处为图片内容的描述]。"
+--- 示例结束 ---
+可用的工具列表如下:
+{
+  "tool_name": "search_web",
+  "tool_description": "在网上搜索信息。",
+  "arguments": {
+    "type": "json object",
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "搜索查询。"
+      }
+    },
+    "required": [
+      "query"
+    ]
+  }
+}
+
+--- 
+prompt:<|im_start|>user
+"帮我搜一下一部高分悬疑电影推荐" 
+<|im_end|>
+<|im_start|>assistant'
+
+
 ```
 
 Ground Truth:
 
 ```
-{'tool_name': 'get_calendar_events', 'arguments': {'date': '今天'}}
+{'tool_name': 'search_web', 'arguments': {'query': '一部高分悬疑电影推荐'}}
 ```
 
 Predicted:
 
 ```
-output：{"tool_name": "get_calendar_events", "arguments": {"date": "今天"}}
+{"tool_name": "search_web", "arguments": {"query": "一部高分悬疑电影推荐"}}
 ```
+
+## eval
+
+评估结果
+
+Loading base model and tokenizer...
+Loading LoRA adapter from: ./checkpoints/lora_gemma_generation
+
+==============================
+1. Starting evaluation of LoRA model on all samples...
+==============================
+Evaluating LoRA model:   0%|          | 0/200 [00:00<?, ?it/s]W0902 06:07:42.197000 1453 torch/_inductor/utils.py:1436] [0/0] Not enough SMs to use max_autotune_gemm mode
+Evaluating LoRA model: 100%|██████████| 200/200 [04:15<00:00,  1.28s/it]
+✅ Detailed evaluation results saved to ./results/lora_detailed_evaluation_results.csv
+
+--- LoRA Model Evaluation Summary ---
+{
+  "exact_match_rate": 0.635,
+  "tool_name_accuracy": 0.85,
+  "average_argument_precision": 0.7425,
+  "average_argument_recall": 0.81,
+  "average_argument_f1": 0.765,
+  "total_samples": 200
+}
+
+✅ LoRA evaluation summary saved to ./results/lora_evaluation_results.json
+
+==============================
+🎉 LoRA evaluation complete!
+==============================
 
 ## convert to gguf
 
