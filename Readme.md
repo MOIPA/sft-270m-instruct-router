@@ -2,7 +2,25 @@
 
 google gemma3-270m 模型的微调和评估
 
-用于agent的指令路由，生成了一些场景和对应指令json，结果是模型输出指令json
+## 收敛过程
+
+| Step | Training Loss |
+|------|---------------|
+| 20   | 1.045900      |
+| 40   | 0.058900      |
+| 60   | 0.020800      |
+| 80   | 0.008200      |
+| 100  | 0.009500      |
+| 120  | 0.007100      |
+| 140  | 0.002600      |
+| 160  | 0.003800      |
+| 180  | 0.001900      |
+| 200  | 0.004000      |
+| 220  | 0.002200      |
+| 240  | 0.002000      |
+
+
+270m用于agent的指令路由，生成了一些场景和对应指令json，输出指令json
 
 baseline各项指标都非常差基本无法使用，微调后工具调用成功率能到达100%，但是参数填写只有10%
 
@@ -136,3 +154,29 @@ https://huggingface.co/spaces/ggml-org/gguf-my-repo
 如果选择本地执行需要拷贝llama.cpp，`pip install -r requirements.txt`，然后执行转换脚本，例如：`python convert_hf_to_gguf.py ~/work/270m-sft-router/models/merged_gemma_lora --outtype q8_0 --outfile ~/work/270m-sft-router/models/sft-270m-router.gguf`
 
 已经微调合并转换好的模型：[地址](https://huggingface.co/Segment139/gemma3-270m-it-router-Q8_0-GGUF/tree/main)
+
+**困惑度报告**
+
+| model                        | params   | type   | size        | ppl                          |
+|------------------------------|----------|--------|-------------|------------------------------|
+| Gemma-3-1b                   | 1B       | Q8_0   | 1013.54 MiB | 23.9791 +/- 3.71056          |
+| Gemma-3-4b-it                | 3.88 B   | Q4_K_M | 2.31 GiB    | PPL = 12.0693 +/- 1.61016    |
+| Gemma-3-270m-Instruct        | 268.10 M | -Q8_0  | 271.81 MiB  | 40.5262 +/- 6.95850          |
+| Gemma-3n-E2B-it              | 4.46 B   | IQ4_XS | 2.70 GiB    | 23.7096 +/- 4.27277          |
+| Qwen2.5-VL-3B-Instruct       | 3.09 B   | Q4_K_M | 1.79 GiB    | 8.5538 +/- 0.73166           |
+| InternVL3-2B-Instruct        | 1.78 B   | Q8_0   | 1.76 GiB    | 8.1897 +/- 0.71310           |
+| Llama-3.2-1B-Instruct        | 1.24 B   | Q4_0   | 729.75 MiB  | 11.8168 +/- 1.38872          |
+| SmolVLM-256M-Instruct        | 162.97 M | Q8_0   | 165.24 MiB  | 19.0869 +/- 2.45214          |
+| SmolVLM2-500M-Video-Instruct | 409.25 M | Q8_0   | 414.86 MiB  | 12.3868 +/- 1.44148          |
+| Qwen2.5-1.5b-instruct        | 1.78 B   | Q8_0   | 1.76 GiB    | 8.0244 +/- 0.68040           |
+| Qwen2.5-Omni-3B              | 3.40 B   | Q8_0   | 3.36 GiB    | 7.3679 +/- 0.61788           |
+| Qwen2.5-VL-3B-Instruct       | 3.09 B   | Q4_0   | 1.70 GiB    | 8.9538 +/- 0.77186           |
+| Qwen2.5-VL-3B-Instruct       | 3.09 B   | Q8_0   | 3.05 GiB    | 8.7017 +/- 0.75286           |
+| Qwen3-0.6B                   | 751.63 M | Q8_0   | 761.80 MiB  | 16.2468 +/- 1.83402          |
+| Qwen3_1.7b                   | 2.03 B   | tq1_0  | 700.0 MiB   | /                            |
+| Qwen3_1.7b                   | 2.03 B   | tq2_0  | 763.0 MiB   | /                            |
+| Qwen3_1.7b                   | 2.03 B   | Q4_0   | 1005.6 MiB  | 20.9941 +/- 3.15524          |
+| Qwen3-1.7B                   | 2.03 B   | Q4_K_M | 1.19 GiB    | 19.1113 +/- 2.72726          |
+| Qwen3-1.7B                   | 2.03 B   | Q8_0   | 2.01        | 15.6347 +/- 2.11321          |
+| Qwen3-1.7B                   | 2.03 B   | f16    | 3.78 GiB    | 15.5588 +/- 2.10436          |
+

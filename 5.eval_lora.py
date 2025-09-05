@@ -69,7 +69,7 @@ def evaluate_model(model, tokenizer, val_file, num_samples=None):
     total_count = 0
     results_data = []
 
-    model.eval()
+    model.eval()                
 
     for i, row in tqdm(df.iterrows(), total=df.shape[0], desc="Evaluating LoRA model"):
         prompt = row["text"]
