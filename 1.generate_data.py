@@ -3,177 +3,276 @@ import random
 import csv
 import re
 
-# --- 1. 修改提示词模板，加入用户问题的占位符 ---
-BASE_PROMPT = """你是一个强大的多模态AI助手。你的核心任务是理解并响应用户的需求。请遵循以下优先级处理用户输入：
+# --- 1. 新的系统提示词 ---
+BASE_PROMPT = """你是一个强大的多模态AI助手。你的核心任务是理解并响应用户的需求。
+
+请遵循以下优先级处理用户输入：
 1.  **当用户提供了图片时**：你的首要任务是用自然语言描述图片内容或回答相关问题。**除非用户的文字指令明确要求使用工具**，否则不应调用工具。
 2.  **当没有图片，或用户明确要求执行工具操作时**：判断用户的意图是否与下面列出的某个工具有明确匹配。如果匹配，请生成一个用于调用工具的JSON对象。
 3.  **所有其他情况**：对于普通对话、问候、开玩笑或任何与工具功能无关的请求，请直接用自然语言回复。
-**工具调用规则**：当你决定调用工具时，必须严格按照MCP协议输出一个JSON对象，前后不能有任何多余的文字。
---- 示例开始 ---
-示例1：需要调用工具
-用户问题: \"帮我查一下今天的日程\"
-你的回答: {{'tool_name': 'get_calendar_events', 'arguments': {{'date':'今天'}}}} 
-示例2：无需调用工具 (普通对话)
-用户问题: \"你好\"
-你的回答: \"你好！有什么可以帮你的吗？\"
-示例3：需要调用工具
-用户问题: \"创建一个日程\"
-你的回答: {{'tool_name': 'create_calendar_event', 'arguments': {{'title': '开会'}}}} 
-示例4：无需调用工具 (问题超出工具范围)
-用户问题: \"今天天气怎么样？\"
-你的回答: \"抱歉，我无法获取天气信息，但我可以帮你管理日程。\"
-示例5：处理图片问题 (无需调用工具)
-用户问题: \"这张图里有什么？\"
-你的回答: \"这张图片展示了[此处为图片内容的描述]。\"
---- 示例结束 ---
+
+**工具调用规则**：
+当你决定调用工具时，必须严格按照MCP协议输出一个JSON对象，不要输出思考过程，也绝对不允许在JSON前后添加任何多余的文字。
+
+**核心规则：处理前置条件**
+某些工具的描述中包含了 `[前置条件: ...]`。在调用这些工具之前，你**必须**首先确保它的前置条件已经被满足。如果前置条件尚未满足（例如，你还不知道今天的日期），你的**唯一任务**就是去调用那个能满足前置条件的工具（例如 `get_current_date`）。**绝对不能**在一次输出中，同时输出多个工具调用。
+
+**核心规则：判断任务完成**
+当工具的返回结果 `[tool_result]` 中包含了明确的成功标识，如 "success", "成功", "已创建", "已完成", "已打开页面" 等关键词时，这代表你的任务已经完成。此时，你**必须**停止调用任何工具，并基于这个成功的结果，为用户生成一个最终的、确认性的自然语言回答。**绝对不能**再次调用相同的或其他的工具。
+
+**核心规则：处理日期**
+你没有任何关于当前日期的先验知识。当用户的请求中包含“今天”、“明天”、“下周三”这样的相对时间描述时，它们本身并不是一个可用的日期。你**必须**首先调用 `get_current_date` 工具来获取当前的绝对日期，然后基于这个结果计算出用户所指的目标日期，才能调用其他工具。
+
+---
+# 示例 1: 简单工具调用
+[conversation_history]
+用户: "帮我查一下2025年9月10号有什么安排"
+[your_turn]
+{{"tool_name": "get_calendar_events", "arguments": {{"date": "2025-09-10"}}}} 
+
+# 示例 2: 无需调用工具 (普通对话)
+[conversation_history]
+用户: "你好"
+[your_turn]
+你好！有什么可以帮你的吗？
+
+# 示例 3: 链式调用的第一步 (信息不足，需获取日期)
+[conversation_history]
+用户: "帮我在明天下午2点安排一个讨论需求的会议，大约持续一小时"
+[your_turn]
+{{"tool_name": "get_current_date", "arguments": {{}}}}
+
+# 示例 4: 链式调用的第二步 (已获取日期，继续执行任务)
+[conversation_history]
+用户: "帮我在明天下午2点安排一个讨论需求的会议，大约持续一小时"
+[tool_result]
+get_current_date() -> "2025-08-07"
+[/tool_result]
+[your_turn]
+{{"tool_name": "create_calendar_event_api", "arguments": {{"title": "讨论需求的会议", "start_time": "2025-08-08 14:00:00", "end_time": "2025-08-08 15:00:00"}}}}
+
+# 示例 5: 任务完成
+[conversation_history]
+用户: "帮我在明天下午2点安排一个讨论需求的会议，大约持续一小时"
+[tool_result]
+get_current_date() -> "2025-08-07"
+[/tool_result]
+[tool_code]
+{{"tool_name": "create_calendar_event_api", "arguments": {{"title": "讨论需求的会议", "start_time": "2025-08-08 14:00:00", "end_time": "2025-08-08 15:00:00"}}}}
+[/tool_code]
+[tool_result]
+create_calendar_event_api() -> "{{\"status\": \"success\", \"message\": \"日程已创建\"}}"
+[/tool_result]
+[your_turn]
+好的，会议已经为您安排在明天下午2点。
+---
 可用的工具列表如下:
 {tool_definition}
 
---- 
+---
 prompt:<|im_start|>user
-\"{user_question}\" 
-<|im_end|>\n<|im_start|>assistant'
+"{user_question}"
+<|im_end|>
+<|im_start|>assistant' 
 """
 
-# --- 2. 为每个工具增加'question_templates'，用于生成更自然的用户问题 ---
+# --- 2. 根据新的工具定义更新 ---
 TOOLS = {
-    "create_calendar_event": {
+    "clear_all_cache": {
         "definition": {
-            "tool_name": "create_calendar_event",
-            "tool_description": "创建一个新的日历事件、会议或待办事项。",
+            "tool_name": "clear_all_cache",
+            "tool_description": "清理应用的所有缓存，包括系统缓存、消息缓存和小程序缓存。",
+            "arguments": {}
+        },
+        "arguments_samples": {},
+        "question_templates": [
+            "帮我清理所有缓存",
+            "清理一下应用的全部缓存",
+            "把所有缓存都删掉"
+        ]
+    },
+    "clear_message_cache": {
+        "definition": {
+            "tool_name": "clear_message_cache",
+            "tool_description": "清理消息模块的所有缓存，主要是图片、视频、文件等聊天附件。",
+            "arguments": {}
+        },
+        "arguments_samples": {},
+        "question_templates": [
+            "清理一下消息缓存",
+            "删除聊天图片和文件",
+            "消息的缓存怎么清理？"
+        ]
+    },
+    "clear_miniprogram_cache": {
+        "definition": {
+            "tool_name": "clear_miniprogram_cache",
+            "tool_description": "清理所有已安装的小程序的缓存文件。",
+            "arguments": {}
+        },
+        "arguments_samples": {},
+        "question_templates": [
+            "把小程序缓存清一下",
+            "删除小程序占用的空间",
+            "如何清理小程序缓存？"
+        ]
+    },
+    "create_calendar_event_api": {
+        "definition": {
+            "tool_name": "create_calendar_event_api",
+            "tool_description": "通过API静默创建一个新的日历事件。[前置条件: 如果用户没有提供具体日期，必须先通过 get_current_date 工具获得今天的日期]。如果用户的描述中包含‘今天’、‘明天’等相对时间，你必须先调用 get_current_date 来解析成绝对日期，然后计算出 start_time 和 end_time。",
             "arguments": {
                 "type": "json object",
                 "properties": {
-                    "title": {"type": "string", "description": "事件或会议的主题"},
-                    "start_time": {"type": "string", "description": "事件的开始时间。如果用户未提供，则忽略此参数，因为创建日历的菜单会让用户选择时间信息"}
+                    "title": { "type": "string", "description": "The title or subject of the event." },
+                    "start_time": { "type": "string", "description": "The event start time in 'YYYY-MM-DD HH:mm:ss' format." },
+                    "end_time": { "type": "string", "description": "The event end time in 'YYYY-MM-DD HH:mm:ss' format." }
+                },
+                "required": ["title", "start_time", "end_time"]
+            }
+        },
+        "arguments_samples": {
+            "title": ["项目周会", "和李总开会", "需求评审"],
+            "start_time": ["2025-09-12 10:00:00", "2025-09-15 14:30:00"],
+            "end_time": ["2025-09-12 11:00:00", "2025-09-15 15:00:00"]
+        },
+        "question_templates": [
+            "帮我安排一个会议，主题是{title}，从{start_time}到{end_time}",
+            "创建一个日程：{title}，时间是{start_time}到{end_time}"
+        ]
+    },
+    "create_calendar_event": {
+        "definition": {
+            "tool_name": "create_calendar_event",
+            "tool_description": "创建一个新的日历事件、会议或待办事项。注意：如果用户没有提供具体日期，你应该先调用 get_current_date 工具来获取今天的日期。",
+            "arguments": {
+                "type": "json object",
+                "properties": {
+                    "title": { "type": "string", "description": "title or theme of the event/meeting" },
+                    "start_time": { "type": "string", "description": "start time of the event。if the user does not provide then ignore this parameter because the create calendar menu will let user choose the time info" }
                 },
                 "required": ["title"]
             }
         },
         "arguments_samples": {
-            "title": ["项目评审会", "团队午餐", "和张医生预约", "支付信用卡账单", "写周报"],
-            "start_time": ["明天上午10点", "今天下午3:30", "周五晚上7点", "2025-10-10 09:00", None]
+            "title": ["团队建设", "生日聚餐", "看医生"],
+            "start_time": ["明天下午", "周五晚上", "今天中午12点", "null"]
         },
         "question_templates": [
-            "帮我创建一个日程，主题是{title}",
-            "创建一个待办事项：{title}，时间是{start_time}",
+            "帮我创建一个日程，主题是{title}，时间是{start_time}",
             "记一下，{start_time}要{title}",
-            "安排一个会议，叫{title}",
-            "提醒我{start_time}要{title}"
+            "安排一个会议，叫{title}"
+        ]
+    },
+    "decrease_font_size": {
+        "definition": {
+            "tool_name": "decrease_font_size",
+            "tool_description": "减小字体大小一号",
+            "arguments": {}
+        },
+        "arguments_samples": {},
+        "question_templates": [
+            "把字体调小一点",
+            "减小字号",
+            "字体太大了，缩小一些"
         ]
     },
     "get_calendar_events": {
         "definition": {
             "tool_name": "get_calendar_events",
-            "tool_description": "查询指定日期的日程、会议或待办事项列表。",
+            "tool_description": "查询指定日期的日程列表。[前置条件: 如果用户没有提供具体日期，必须先通过 get_current_date 工具获得今天的日期]。如果用户的描述中包含‘今天’、‘明天’等相对时间，你必须先调用 get_current_date 来解析成绝对日期。",
             "arguments": {
                 "type": "json object",
                 "properties": {
-                    "date": {"type": "string", "description": "要查询的日期。如果用户未提供，则忽略此参数。"}
-                }
+                    "date": { "type": "string", "description": "The date to query. 格式是 yyyy-MM-dd" }
+                },
+                "required": ["date"]
             }
         },
         "arguments_samples": {
-            "date": ["今天", "明天", "后天", "本周", "下周三", "2025-09-05"]
+            "date": ["2025-09-11", "2025-09-12", "明天", "今天"]
         },
         "question_templates": [
             "查一下{date}的日程",
             "我{date}有什么安排？",
-            "看看{date}的日历",
-            "帮我获取{date}的日程列表"
+            "看看{date}的日历"
         ]
     },
-    "send_message": {
+    "get_current_date": {
         "definition": {
-            "tool_name": "send_message",
-            "tool_description": "给联系人发送消息。",
+            "tool_name": "get_current_date",
+            "tool_description": "获取今天的绝对日期，格式为 YYYY-MM-DD。这是解析'今天'、'明天'等相对时间描述的基础工具，必须在处理任何与日期相关的任务前首先调用。",
+            "arguments": {}
+        },
+        "arguments_samples": {},
+        "question_templates": [
+            "今天几号？",
+            "今天是哪一天？",
+            "获取当前日期"
+        ]
+    },
+    "increase_font_size": {
+        "definition": {
+            "tool_name": "increase_font_size",
+            "tool_description": "增大字体大小一号",
+            "arguments": {}
+        },
+        "arguments_samples": {},
+        "question_templates": [
+            "把字体调大一点",
+            "增大字号",
+            "字体太小了，放大一些"
+        ]
+    },
+    "search_contact": {
+        "definition": {
+            "tool_name": "search_contact",
+            "tool_description": "Searches for contacts based on a keyword (such as name, pinyin, or employee ID).",
             "arguments": {
                 "type": "json object",
                 "properties": {
-                    "recipient": {"type": "string", "description": "要发送消息的人的姓名或电话号码。"}, 
-                    "content": {"type": "string", "description": "消息的内容。"}
+                    "keyword": { "type": "string", "description": "The keyword to search for, e.g., 'John Doe' or 'zhangsan'." }
                 },
-                "required": ["recipient", "content"]
+                "required": ["keyword"]
             }
         },
         "arguments_samples": {
-            "recipient": ["王伟", "李娜", "项目经理", "13912345678"],
-            "content": ["下午的会议改到301会议室了", "我晚上会晚点到家", "记得查收邮件", "生日快乐！"]
+            "keyword": ["张三", "Li Si", "wangwu", "12345", "项目经理"]
         },
         "question_templates": [
-            "给{recipient}发条消息，说{content}",
-            "告诉{recipient}：{content}",
-            "发消息给{recipient}，内容是{content}"
+            "帮我找一下{keyword}",
+            "查一下联系人{keyword}",
+            "搜索{keyword}的联系方式"
         ]
     },
-    "set_reminder": {
+    "set_font_size": {
         "definition": {
-            "tool_name": "set_reminder",
-            "tool_description": "为特定任务或事件设置提醒。",
-            "arguments": {
-                "type": "json object",
-                "properties": {
-                    "task": {"type": "string", "description": "需要提醒的任务。"},
-                    "time": {"type": "string", "description": "提醒的时间。"}
-                },
-                "required": ["task", "time"]
-            }
+            "tool_name": "set_font_size",
+            "tool_description": "打开字体大小设置页面",
+            "arguments": {}
         },
-        "arguments_samples": {
-            "task": ["取快递", "给妈妈打电话", "买菜", "提交报销单"],
-            "time": ["下午5点", "15分钟后", "明天早上9点半", "2025-09-02 18:00"]
-        },
+        "arguments_samples": {},
         "question_templates": [
-            "提醒我{time}要{task}",
-            "设置一个提醒，{time}的时候提醒我{task}",
-            "{time}叫我一下，记得要{task}"
+            "打开字体大小设置",
+            "我想调整字体大小",
+            "在哪里可以设置字体？"
         ]
     },
-    "get_weather": {
+    "upload_log": {
         "definition": {
-            "tool_name": "get_weather",
-            "tool_description": "获取特定地点的天气预报。",
-            "arguments": {
-                "type": "json object",
-                "properties": {
-                    "location": {"type": "string", "description": "要获取天气的城市名称。"},
-                    "date": {"type": "string", "description": "预报的日期，例如'今天'或'明天'。"}
-                },
-                "required": ["location"]
-            }
+            "tool_name": "upload_log",
+            "tool_description": "Opens the log upload page, allowing the user to upload application logs.",
+            "arguments": {}
         },
-        "arguments_samples": {
-            "location": ["北京", "上海", "广州", "深圳", "杭州"],
-            "date": ["今天", "明天", "后天", None]
-        },
+        "arguments_samples": {},
         "question_templates": [
-            "查一下{location}{date}的天气怎么样？",
-            "{location}的天气预报",
-            "{location}{date}天气如何"
-        ]
-    },
-    "search_web": {
-        "definition": {
-            "tool_name": "search_web",
-            "tool_description": "在网上搜索信息。",
-            "arguments": {
-                "type": "json object",
-                "properties": {
-                    "query": {"type": "string", "description": "搜索查询。"}
-                },
-                "required": ["query"]
-            }
-        },
-        "arguments_samples": {
-            "query": ["最新的AI研究进展", "如何学习弹吉他", "附近有什么好吃的餐厅", "一部高分悬疑电影推荐"]
-        },
-        "question_templates": [
-            "帮我搜一下{query}",
-            "查查{query}是什么",
-            "搜索{query}"
+            "帮我上传一下日志",
+            "我要上报问题，需要上传日志",
+            "打开日志上传页面"
         ]
     }
 }
+
 
 def generate_data(num_samples):
     data = []
@@ -181,61 +280,96 @@ def generate_data(num_samples):
     for _ in range(num_samples):
         tool_name = random.choice(tool_names)
         tool_info = TOOLS[tool_name]
-        
+
         tool_definition_str = json.dumps(tool_info["definition"], ensure_ascii=False, indent=2)
-        
+
         # --- 3. 生成随机参数 ---
         args = {}
-        for arg_name, samples in tool_info["arguments_samples"].items():
-            is_required = arg_name in tool_info["definition"]["arguments"].get("required", [])
-            if is_required or random.random() < 0.7:
-                value = random.choice(samples)
+        # 确保所有必填参数都被填充
+        required_args = tool_info["definition"].get("arguments", {}).get("required", [])
+        for arg_name in required_args:
+            if arg_name in tool_info["arguments_samples"]:
+                value = random.choice(tool_info["arguments_samples"].get(arg_name, [None]))
                 if value is not None:
                     args[arg_name] = value
-        
-        if not args and tool_info["arguments_samples"]:
+
+        # 随机填充可选参数
+        for arg_name, samples in tool_info.get("arguments_samples", {}).items():
+            if arg_name not in args: # 如果还未被填充
+                # 70%的概率填充可选参数
+                if random.random() < 0.7:
+                    value = random.choice(samples)
+                    if value is not None:
+                        args[arg_name] = value
+
+        # 如果这个工具有参数，但最终args还是空的，强行选一个
+        if not args and tool_info.get("arguments_samples"):
             arg_name = random.choice(list(tool_info["arguments_samples"].keys()))
             value = random.choice(tool_info["arguments_samples"].get(arg_name, [None]))
             if value is not None:
                 args[arg_name] = value
 
+
         # --- 4. 根据参数和模板生成用户问题 ---
         user_question = ""
-        if "question_templates" in tool_info and args:
+        if "question_templates" in tool_info and tool_info["question_templates"]:
             question_template = random.choice(tool_info["question_templates"])
-            # 使用所有可能的key来格式化，缺失的key用空字符串代替
-            all_possible_args = {key: "" for key in tool_info["arguments_samples"]}
-            all_possible_args.update(args)
-            user_question = question_template.format(**all_possible_args)
-            # 清理因为缺失参数可能导致的语法问题，例如多余的逗号、顿号、介词等
-            user_question = user_question.replace("''", "").replace("\", \"", " ").strip() # 移除空字符串的引号
-            user_question = re.sub(r"[，、\s]+" + "(,|" + " " + ")*", " ", user_question).strip()
-            user_question = re.sub(r"(时间是|内容是|主题是|叫|关于|为了|为了|关于|关于|关于)$", "", user_question).strip()
-            user_question = re.sub(r"\s+", " ", user_question).strip()
 
-        # 如果生成的问题为空（例如模板只有一个可选参数且未被选中），则创建一个简单问题
+            # 准备格式化字典，对于缺失的参数用空字符串代替
+            format_args = {key: "" for key in tool_info.get("arguments_samples", {})}
+            format_args.update(args)
+
+            try:
+                user_question = question_template.format(**format_args)
+                # 清理因为缺失参数可能导致的语法问题
+                user_question = user_question.replace("，时间是", "").replace("时间是", "").strip()
+                user_question = re.sub(r'[\s，]+$', '', user_question) # 移除末尾的空格和逗号
+                user_question = re.sub(r'^\s*要', '', user_question) # 移除开头的"要"
+            except KeyError as e:
+                # 如果模板中的某个key不存在于format_args中，跳过这个模板
+                # print(f"Skipping template due to KeyError: {e}. Template: '{question_template}'")
+                continue
+
+
+        # 如果生成的问题为空，则创建一个简单问题
         if not user_question:
-            desc = tool_info["definition"]["tool_description"]
+            desc = tool_info["definition"]["tool_description"].split("。")[0] # 取第一句描述
             user_question = f"帮我{desc}"
 
+
         # --- 5. 组合最终的输入和输出 ---
-        input_prompt = BASE_PROMPT.format(
-            tool_definition=tool_definition_str,
-            user_question=user_question
-        )
-        
-        tool_call = {
-            "tool_name": tool_name,
-            "arguments": args
-        }
-        
-        output_str = "output：" + json.dumps(tool_call, ensure_ascii=False)
-        
+        # 对于需要获取日期的工具，模拟链式调用场景
+        is_date_dependent = "date" in tool_info["definition"].get("arguments", {}).get("properties", {})
+        use_relative_date = random.random() < 0.5 and "date" in args and args["date"] in ["今天", "明天"]
+
+        if is_date_dependent and use_relative_date:
+            # 场景1: 链式调用的第一步，模型应该去获取日期
+            input_prompt = BASE_PROMPT.format(
+                tool_definition=json.dumps(TOOLS["get_current_date"]["definition"], ensure_ascii=False, indent=2),
+                user_question=user_question
+            )
+            output_obj = {
+                "tool_name": "get_current_date",
+                "arguments": {}
+            }
+        else:
+            # 场景2: 普通的单步调用
+            input_prompt = BASE_PROMPT.format(
+                tool_definition=tool_definition_str,
+                user_question=user_question
+            )
+            output_obj = {
+                "tool_name": tool_name,
+                "arguments": args
+            }
+
+        output_str = "output：" + json.dumps(output_obj, ensure_ascii=False)
+
         data.append({
             "text": input_prompt,
             "label": output_str
         })
-        
+
     return data
 
 # --- Main execution ---
